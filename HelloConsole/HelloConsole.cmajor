@@ -1,0 +1,325 @@
+graph HelloConsole  [[ main ]]
+{
+    input  stream float audioIn;    
+    // input  stream float64 audioIn64; 
+    output stream float audioOut;
+
+    input event int preEQSwitch       [[ name: "PreEQ",  min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
+    input event float gaindB          [[ name: "Gain",   min: 0,    max: 40,    init:  30,  step: 0.1 ]];
+    input event int distSwitch        [[ name: "Dist",   min: 0,    max:  2,    init:   0,  text: "Tanh|Fuzz|Ignition" ]];
+    input event int posEQSwitch       [[ name: "PostEQ", min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
+    input event float leveldB         [[ name: "Level",  min: -40,  max:  0,    init: -30,  step: 0.1 ]];
+
+    node distortion = Distortion * 4;  // oversampling 4 times
+    node filter = std::filters (float)::tpt::onepole::Processor;
+    node envelopeFollower = EnvelopeFollower;
+    node valueEcho = ValueEcho;
+    
+    connection
+    {
+        // send event values to the processors
+        preEQSwitch     ->  distortion.preEQStatus;
+        gaindB          ->  distortion.gaindBIn;
+        distSwitch      ->  distortion.distCurrent;
+        posEQSwitch     ->  distortion.posEQStatus;
+        leveldB         ->  Level.leveldBIn;
+
+        // connect audio streams
+        audioIn         ->  distortion.audioIn;
+        distortion      ->  Level.audioIn;
+        Level           ->  audioOut;
+        audioIn         ->  envelopeFollower.audioIn;
+        // envelopeFollower.envOut ->  distortion.audioIn;
+        // distortion      ->  Level.audioIn;
+        // Level           ->  audioOut;
+        // audioIn         ->  envelopeFollower.audioIn;
+        
+    }
+}
+
+
+processor ValueEcho
+{
+    input value float inValue [[ name: "Value In",  min: 0, max: 1.0, init:  0.0 ]];
+    output event float outEvent;
+
+    void main()
+    {
+        int count = 0;
+
+        loop
+        {
+            if (++count >= processor.frequency / 25)
+            {
+                outEvent <- inValue;
+                count = 0;
+            }
+
+            advance();
+        }
+    }
+}
+
+
+processor Distortion
+{
+    input  stream float audioIn;
+    output stream float audioOut;
+    // output event float outEvent;
+
+    input event int preEQStatus;
+    input event int posEQStatus;
+    input event int distCurrent;
+    input event float gaindBIn;
+
+    event preEQStatus (int i)           { preEQStat = i; }
+    event posEQStatus (int i)           { posEQStat = i; }
+    event distCurrent (int i)           { distCurr = i; }
+    event gaindBIn (float f)            { gaindB = f; }
+
+    // configure static filters here
+    var preFilter = std::filters::tpt::svf::create(1,processor.frequency,200.0,5.0);
+    var posFilter = std::filters::tpt::svf::create(0,processor.frequency,4000.0,1.0);
+
+    int preEQStat;
+    int posEQStat;
+    int distCurr;
+    float gain;
+    float gaindB = 40.0f;
+
+    // Main processing function
+    void main()
+    {
+        float32 in;
+        float32 outFilPre;
+        float32 outGain;
+        float32 outFilPos;
+        float32 out;
+
+        loop
+        {
+            updateVariables();
+
+            // STAGE 1
+            // power input values
+            in = audioIn * gain;
+
+            // STAGE 2
+            // processing by highpass filter
+            if (preEQStat == 1)
+            {
+                outFilPre = preFilter.process(in);
+            }
+            else
+            {
+                outFilPre = in;
+            }
+
+            // STAGE 3
+            // processing by distortion
+
+            // case 0: tanh
+            if (distCurr == 0)
+            {
+                outGain = tanh(outFilPre);
+            }
+            // case 1: fuzz
+            else if(distCurr == 1)
+            {
+                if (outFilPre < 0)
+                {
+                    outGain = 1;
+                }
+                else
+                {
+                    outGain = -1;
+                }
+            }
+            // case 2: ignition
+            else if(distCurr == 2)
+            {
+                // f(x) = x / (abs(x) + 1)
+                outGain = outFilPre / (abs(outFilPre) + 1);
+            }
+            // default
+            else
+            {
+                outGain = outFilPre;
+            }
+
+            // STAGE 4
+            // processing by lowpass filter
+            if (posEQStat == 1)
+            {
+                outFilPos = posFilter.process(outGain);
+            }
+            else
+            {
+                outFilPos = outGain;
+            }
+
+            // STAGE 5
+            // send back processed signal
+
+            
+
+
+
+
+            audioOut <- float (outFilPos);
+
+            advance();
+        }
+    }
+
+    void updateVariables()
+    {
+        // gain update
+        gain = std::levels::dBtoGain (gaindB);
+    }
+}
+
+
+
+
+
+// poweramp processor to limit loudness
+processor Level 
+{
+    // standard input & output
+    input  stream float audioIn;
+    output stream float audioOut;
+
+    // the input to connect to the processor from outside
+    input event float leveldBIn;
+
+    // this is the event by the level poti
+    event leveldBIn (float f)            { leveldB = f; }
+
+    float level;
+    float leveldB = 40.0f;
+
+    void main()
+    {
+        float64 out;
+
+        loop
+        {
+            updateVariables();
+
+            out = audioIn * level;
+
+            audioOut <- float (out);
+            advance();
+        }
+    }
+    
+    void updateVariables()
+    {
+        // gain update
+        level = std::levels::dBtoGain (leveldB);
+    }
+}
+
+
+
+// This is a simple envelope follower that outputs the smoothed amplitude of an input signal
+processor EnvelopeFollower
+{
+    input stream float audioIn; // The audio input
+    output stream float envOut; // The envelope output
+
+    // Parameters for the envelope follower
+    float attack = 0.01f; // The attack time in seconds
+    float release = 0.1f; // The release time in seconds
+
+    // Internal state variables
+    float env = 0.0f; // The current envelope value
+    float attCoeff = 0.0f; // The attack coefficient
+    float relCoeff = 0.0f; // The release coefficient
+    
+    float sampleRate = 44100;
+
+    int count = 0;
+
+    void init()
+    {
+        // Calculate the coefficients based on the sample rate and the parameters
+        attCoeff = exp (-1 / (sampleRate * attack));
+        relCoeff = exp (-1 / (sampleRate * release));
+    }
+
+    void main()
+    {
+        loop
+        {
+            let in = abs (audioIn); // Get the absolute value of the input signal
+
+            if (in > env) // If the input is higher than the current envelope value
+            {
+                env = attCoeff * (env - in) + in; // Apply a fast attack using a low-pass filter formula
+            }
+            else // If the input is lower than the current envelope value
+            {
+                env = relCoeff * (env - in) + in; // Apply a slow release using a low-pass filter formula
+            }
+
+            if (++count >= processor.frequency / 25)
+            {
+                console <- "\n";
+                console <- "Env: ";
+                console <- float (env);
+                count = 0;
+            }
+
+            envOut <- env; // Output the envelope value
+
+            advance(); // Advance to the next sample
+        }
+    }
+}
+
+
+
+// processor TheFilter
+// {
+//     input event float roomSize;
+//     output event float wetGainOut;
+
+//     let wetScaleFactor  = 1.5f;
+//     let dryScaleFactor  = 2.0f;
+//     let roomScaleFactor = 0.28f;
+//     let roomOffset      = 0.7f;
+//     let dampScaleFactor = 0.4f;
+
+//     void main()
+//     {
+
+//         float64 out;
+//         float64 fil;
+
+//         loop
+//         {
+//             updateVariables();
+
+
+//             let in = audioIn * gain;
+//             out = filter.process(in);
+
+//             // if (in < 0)
+//             // {
+//             //     out = 1;
+//             // }
+//             // else
+//             // {
+//             //     out = -1;
+//             // }
+
+//             out = tanh(out);
+
+//             audioOut <- float (out);
+//             //audioOut <- float (out);
+//             advance();
+//         }
+//     }
+// }

@@ -1,0 +1,19 @@
+graph SvfFilter [[ main ]]
+{
+    // svf
+    input filter.mode;
+    input filter.frequency;
+    input filter.q;
+
+    input stream float<2> in;
+    output stream float<2> out;
+
+    node filter             = std::filters (float<2>)::tpt::svf::Processor;
+
+    connection
+    {
+        in -> filter.in;
+        filter.out -> out;
+    }
+}
+

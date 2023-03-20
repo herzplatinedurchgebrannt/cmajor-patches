@@ -1,0 +1,85 @@
+//  //
+//  //     ,ad888ba,                                88
+//  //    d8"'    "8b
+//  //   d8            88,dPba,,adPba,   ,adPPYba,  88      The Cmajor Language
+//  //   88            88P'  "88"   "8a        '88  88
+//  //   Y8,           88     88     88  ,adPPPP88  88      (c)2022 Sound Stacks Ltd
+//  //    Y8a.   .a8P  88     88     88  88,   ,88  88      https://cmajor.dev
+//  //     '"Y888Y"'   88     88     88  '"8bbP"Y8  88
+//  //                                             ,88
+//  //                                           888P"
+
+graph Distortion  [[ main ]]
+{
+    input  stream float audioIn;    // just using mono in and out
+    output stream float audioOut;
+
+    input event float gaindB            [[ name: "Gain",   min: 0,  max:    40, init:    20, step: 0.1 ]];
+
+    node simpleDiode = SimpleDiode * 4;  // oversampling 4 times
+
+    connection
+    {
+        audioIn         -> simpleDiode.audioIn;
+        gaindB          -> simpleDiode.gaindBIn;
+
+
+        simpleDiode -> audioOut;
+    }
+}
+//==============================================================================
+processor SimpleDiode
+{
+    input  stream float audioIn;
+    output stream float audioOut;
+
+    // input event float cutoffFrequencyIn;
+    input event float gaindBIn;
+
+    // event cutoffFrequencyIn (float f)   { cutoffFrequency = f; }
+    event gaindBIn (float f)            { gaindB = f; }
+
+    // Diode Clipper parameters
+    // float cutoffFrequency = 10000.0f;
+    float gaindB = 40.0f;
+
+    // filter variables
+    float gain;
+    float level;
+
+    // Main processing function
+    void main()
+    {
+
+        float64 out;
+
+        loop
+        {
+            updateVariables();
+
+            let in = audioIn * gain;
+
+            // if (in < 0)
+            // {
+            //     out = 1;
+            // }
+            // else
+            // {
+            //     out = -1;
+            // }
+
+            out = tanh(in);
+
+            audioOut <- float (out);
+            //audioOut <- float (out);
+            advance();
+        }
+    }
+
+
+    void updateVariables()
+    {
+        // gain update
+        gain = std::levels::dBtoGain (gaindB);
+    }
+}
