@@ -1,0 +1,19 @@
+{
+    "CmajorVersion":    1,
+    "ID":               "dev.cmajor.examples.customgui",
+    "version":          "1.0",
+    "name":             "Tubescreamer",
+    "description":      "A version of the Freeverb patch with a modified GUI",
+    "category":         "effect",
+    "manufacturer":     "Sound Stacks Ltd",
+    "isInstrument":     false,
+
+    "source":           "Tubescreamer.cmajor",
+
+    "view":             {
+                            "src": "web_ui/index.js",
+                            "width": 600,
+                            "height": 250,
+                            "resizable": true
+                        }
+}

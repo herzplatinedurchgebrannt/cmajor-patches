@@ -1,0 +1,19 @@
+graph Crossover  [[main]]
+{
+    // crossover
+
+    input filter.frequency;
+
+
+    input stream float<2> in;
+    output stream float<2> out;
+
+    node filter             = std::filters (float<2>)::crossover::Processor;
+
+    connection
+    {
+        in -> filter.in;
+        filter.out -> out;
+    }
+}
+
