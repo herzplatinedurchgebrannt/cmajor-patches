@@ -6,7 +6,7 @@ graph HelloConsole  [[ main ]]
 
     input event int preEQSwitch       [[ name: "PreEQ",  min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
     input event float gaindB          [[ name: "Gain",   min: 0,    max: 40,    init:  30,  step: 0.1 ]];
-    input event int distSwitch        [[ name: "Dist",   min: 0,    max:  2,    init:   0,  text: "Tanh|Fuzz|Ignition" ]];
+    input event int distSwitch        [[ name: "Dist",   min: 0,    max:  3,    init:   0,  text: "Tanh|Fuzz|Ignition|Parameter" ]];
     input event int posEQSwitch       [[ name: "PostEQ", min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
     input event float leveldB         [[ name: "Level",  min: -40,  max:  0,    init: -30,  step: 0.1 ]];
 
@@ -23,6 +23,9 @@ graph HelloConsole  [[ main ]]
         distSwitch      ->  distortion.distCurrent;
         posEQSwitch     ->  distortion.posEQStatus;
         leveldB         ->  Level.leveldBIn;
+
+        envelopeFollower.envEventOut     ->  distortion.envEventIn;
+
 
         // connect audio streams
         audioIn         ->  distortion.audioIn;
@@ -66,6 +69,7 @@ processor Distortion
     input  stream float audioIn;
     output stream float audioOut;
     // output event float outEvent;
+    input event float envEventIn;
 
     input event int preEQStatus;
     input event int posEQStatus;
@@ -76,6 +80,7 @@ processor Distortion
     event posEQStatus (int i)           { posEQStat = i; }
     event distCurrent (int i)           { distCurr = i; }
     event gaindBIn (float f)            { gaindB = f; }
+    event envEventIn (float f)          { envEvent = f; }
 
     // configure static filters here
     var preFilter = std::filters::tpt::svf::create(1,processor.frequency,200.0,5.0);
@@ -86,6 +91,9 @@ processor Distortion
     int distCurr;
     float gain;
     float gaindB = 40.0f;
+    float envEvent;
+
+    int count = 0;
 
     // Main processing function
     void main()
@@ -95,6 +103,8 @@ processor Distortion
         float32 outGain;
         float32 outFilPos;
         float32 out;
+        float32 x;
+        float32 parameter;
 
         loop
         {
@@ -141,6 +151,13 @@ processor Distortion
                 // f(x) = x / (abs(x) + 1)
                 outGain = outFilPre / (abs(outFilPre) + 1);
             }
+            // case 3: parameter
+            else if(distCurr == 3)
+            {
+                x = outFilPre;
+                parameter = envEvent;
+                outGain = (x * (abs(x) + parameter) / (x * x + (parameter - 1) * abs(x) + 1)) * 0.7f;                
+            }
             // default
             else
             {
@@ -163,7 +180,13 @@ processor Distortion
 
             
 
-
+            if (++count >= processor.frequency / 5)
+            {
+                console <- "\n";
+                console <- "Dist: ";
+                console <- float (envEvent);
+                count = 0;
+            }
 
 
             audioOut <- float (outFilPos);
@@ -228,6 +251,7 @@ processor EnvelopeFollower
 {
     input stream float audioIn; // The audio input
     output stream float envOut; // The envelope output
+    output event float envEventOut; // The envelope output
 
     // Parameters for the envelope follower
     float attack = 0.01f; // The attack time in seconds
@@ -264,62 +288,20 @@ processor EnvelopeFollower
                 env = relCoeff * (env - in) + in; // Apply a slow release using a low-pass filter formula
             }
 
-            if (++count >= processor.frequency / 25)
-            {
-                console <- "\n";
-                console <- "Env: ";
-                console <- float (env);
-                count = 0;
-            }
+            // debug
+            // if (++count >= processor.frequency / 5)
+            // {
+            //     console <- "\n";
+            //     console <- "Env: ";
+            //     console <- float (env);
+            //     count = 0;
+            // }
 
+            // event to change waveshaper parameter
+            envEventOut <- env;
             envOut <- env; // Output the envelope value
 
             advance(); // Advance to the next sample
         }
     }
 }
-
-
-
-// processor TheFilter
-// {
-//     input event float roomSize;
-//     output event float wetGainOut;
-
-//     let wetScaleFactor  = 1.5f;
-//     let dryScaleFactor  = 2.0f;
-//     let roomScaleFactor = 0.28f;
-//     let roomOffset      = 0.7f;
-//     let dampScaleFactor = 0.4f;
-
-//     void main()
-//     {
-
-//         float64 out;
-//         float64 fil;
-
-//         loop
-//         {
-//             updateVariables();
-
-
-//             let in = audioIn * gain;
-//             out = filter.process(in);
-
-//             // if (in < 0)
-//             // {
-//             //     out = 1;
-//             // }
-//             // else
-//             // {
-//             //     out = -1;
-//             // }
-
-//             out = tanh(out);
-
-//             audioOut <- float (out);
-//             //audioOut <- float (out);
-//             advance();
-//         }
-//     }
-// }
