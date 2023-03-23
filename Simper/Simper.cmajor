@@ -1,20 +1,163 @@
 graph Simper  [[main]]
 {
     // simper
-    input filter.mode;
-    input filter.frequency;
-    input filter.q;
-    input filter.gain;
+    input stream float in;
+    output stream float out;
 
-    input stream float<2> in;
-    output stream float<2> out;
+    input event int modeSwitch          [[ name: "Mode",   min: 0,      max:  8,      init:   4,      text: "low|high|band|notch|peak|all|lowSh|highSh|bell" ]];
+    input event float freq              [[ name: "Freq",   min: 0,      max: 20000,   init:  2000,    unit: "Hz" ]];
+    input event float q                 [[ name: "Q",      min: 0.01,      max: 100,  init:  0.707107 ]];
+    input event float gain              [[ name: "Gain",   min: -100,   max: 100,     init:  0      ]];
 
-    node filter             = std::filters (float<2>)::simper::Processor;
+    node simperFilter      = SimperFilter;
 
     connection
     {
-        in -> filter.in;
-        filter.out -> out;
+        modeSwitch  -> simperFilter.modeSwitchProc;
+        freq        -> simperFilter.freqProc;
+        q           -> simperFilter.qProc;
+        gain        -> simperFilter.gainProc;
+
+        in -> simperFilter.audioIn;
+        simperFilter.audioOut -> out;
     }
 }
 
+
+
+
+
+processor SimperFilter
+{
+    input  stream float audioIn;
+    output stream float audioOut;
+
+    input event int modeSwitchProc;
+    input event float freqProc;
+    input event float qProc;
+    input event float gainProc;
+
+    event modeSwitchProc (int i)    { updateFilter = true; modeSwitchVal = i; }
+    event freqProc (float f)        { updateFilter = true; freqVal = f; }
+    event qProc (float f)           { updateFilter = true; qVal = f; }
+    event gainProc (float f)        { updateFilter = true; gainVal = f; }
+
+
+    // configure static filters here
+    var filter = std::filters::simper::create(1,processor.frequency,2000,0.5,10);
+
+
+    int count = 0;
+
+
+    bool updateFilter = false;
+    float freqVal = 2000;
+    int modeSwitchVal = 1;
+    float qVal = 0.5;
+    float gainVal = 10;
+
+
+
+    // Main processing function
+    void main()
+    {
+        float32 in;
+        float32 out;
+
+        int count = 0;
+
+
+        loop
+        {
+            if (updateFilter)
+            {
+                filter.setMode (modeSwitchVal);
+                filter.setFrequency (processor.frequency, freqVal, qVal, gainVal);
+                updateFilter = false;
+                console <- "\n";
+                console <- "UPDATE ---: ";
+            }
+
+
+
+            loop (32)
+            {
+                out = filter.process(audioIn);
+
+                audioOut <- out;
+
+                if (++count >= processor.frequency / 5)
+                {
+                    console <- "\n";
+                    console <- "In: ";
+                    console <- float (audioIn);
+                    console <- "\n";
+                    console <- "Out: ";
+                    console <- float (out);
+                    console <- "\n";
+                    console <- "Mode: ";
+                    console <- float (modeSwitchVal);
+                    console <- "\n";
+                    console <- "Freq: ";
+                    console <- float (freqVal);
+                    console <- "\n";
+                    console <- "Q: ";
+                    console <- float (qVal);
+                    console <- "\n";
+                    console <- "Gain: ";
+                    console <- float (gainVal);
+                    count = 0;
+                }
+
+
+                advance();
+            }
+
+
+        }
+
+
+        // loop
+        // {
+        //     // updateVariables();
+
+
+        //     out = audioIn;
+        //     out = preFilter.process(audioIn);
+
+        //     if (++count >= processor.frequency / 1)
+        //     {
+        //         console <- "\n";
+        //         console <- "In: ";
+        //         console <- float (audioIn);
+        //         console <- "\n";
+        //         console <- "Out: ";
+        //         console <- float (out);
+        //         console <- "\n";
+        //         console <- "Mode: ";
+        //         console <- float (modeSwitchVal);
+        //         console <- "\n";
+        //         console <- "Freq: ";
+        //         console <- float (freqVal);
+        //         console <- "\n";
+        //         console <- "Q: ";
+        //         console <- float (qVal);
+        //         console <- "\n";
+        //         console <- "Gain: ";
+        //         console <- float (gainVal);
+        //         count = 0;
+        //     }
+
+
+        //     audioOut <- float (out);
+
+        //     advance();
+        // }
+    }
+
+    void updateVariables()
+    {
+        // gain update
+        // gain = std::levels::dBtoGain (gaindB);
+    }
+}
