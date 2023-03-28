@@ -5,10 +5,10 @@ graph HelloConsole  [[ main ]]
     output stream float audioOut;
 
     input event int preEQSwitch       [[ name: "PreEQ",  min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
-    input event float gaindB          [[ name: "Gain",   min: 0,    max: 40,    init:  30,  step: 0.1 ]];
-    input event int distSwitch        [[ name: "Dist",   min: 0,    max:  3,    init:   0,  text: "Tanh|Fuzz|Ignition|Parameter" ]];
-    input event int posEQSwitch       [[ name: "PostEQ", min: 0,    max:  1,    init:   1,  text: "Off|On" ]];
-    input event float leveldB         [[ name: "Level",  min: -40,  max:  0,    init: -30,  step: 0.1 ]];
+    input event float gaindB          [[ name: "Gain",   min: 0,    max: 60,    init:  30,  step: 0.1 ]];
+    input event int distSwitch        [[ name: "Dist",   min: 0,    max:  3,    init:   3,  text: "Tanh|Fuzz|Ignition|Parameter" ]];
+    input event int posEQSwitch       [[ name: "PostEQ", min: 0,    max:  1,    init:   0,  text: "Off|On" ]];
+    input event float leveldB         [[ name: "Level",  min: -100,  max:  0,    init: -30,  step: 0.1 ]];
 
     node distortion = Distortion * 4;  // oversampling 4 times
     node filter = std::filters (float)::tpt::onepole::Processor;
@@ -83,13 +83,11 @@ processor Distortion
     event envEventIn (float f)          { envEvent = f; }
 
     // TEST  
-    // PRE: ONE POLE high pass 220hz
     // POST: ONE POLE low pass 7040hz  // ALTERNATIV BUTTER lowpass 5800hz
 
-
-
     // configure static filters here
-    var preFilter = std::filters::tpt::svf::create(1,processor.frequency,200.0,5.0);
+    //var preFilter = std::filters::tpt::svf::create(1,processor.frequency,200.0,5.0);
+    var preFilter = std::filters::tpt::onepole::create(1,processor.frequency,450.0);
     var posFilter = std::filters::tpt::svf::create(0,processor.frequency,4000.0,1.0);
 
     int preEQStat;
@@ -305,7 +303,7 @@ processor EnvelopeFollower
 
             // event to change waveshaper parameter
             envEventOut <- env;
-            envOut <- env; // Output the envelope value
+            //envOut <- env; // Output the envelope value
 
             advance(); // Advance to the next sample
         }
