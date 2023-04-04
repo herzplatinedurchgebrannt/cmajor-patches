@@ -215,46 +215,28 @@ namespace lx::filters (using FrameType = float32,
             // CoefficientType b;
             // FrameType z1;
 
-            float32 a0;
-            float32 a1;
-            float32 a2;
-            float32 b0;
-            float32 b1;
-            float32 b2;
+            float64 a0;
+            float64 a1;
+            float64 a2;
+            float64 b0;
+            float64 b1;
+            float64 b2;
             //float outgain;
         
-            float32 yl;
-            float32 x1l;
-            float32 x2l;
-            float32 y1l;
-            float32 y2l;
-            float32 yrv;
-            float32 x1r;
-            float32 x2r;
-            float32 y1r;
-            float32 y2r;
-            float32 SPN;
+            float64 yl;
+            float64 x1l;
+            float64 x2l;
+            float64 y1l;
+            float64 y2l;
+            float64 yrv;
+            float64 x1r;
+            float64 x2r;
+            float64 y1r;
+            float64 y2r;
+            float64 SPN;
 
             float64 F;
             float64 asnd;
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-            // float32
-
-
-
 
             void reset()
             {
@@ -276,7 +258,7 @@ namespace lx::filters (using FrameType = float32,
                 //mono = slider1;
                 let cf = filterFrequency/ processorFrequency; // srate; //slider 2
                 // float boost = std::levels::dBtoGain(boostVar); //slider 3
-                let boost = boostVar;
+                let boost = std::levels::dBtoGain(boostVar);
                 let bw = bandwidth; //slider 4  // removed "/srate" here and added BW in proper ranges
                 //float outgain = 10^(outputdb/20); //slider 5
                 let ca = tan(pi*(cf-0.25)); 
@@ -346,31 +328,31 @@ namespace lx::filters (using FrameType = float32,
                 let a2plus1 = 1 + as2;
                 let ma2plus1 = 1 - as2;
 
-                var a0 = a2plus1 + alphan*ma2plus1;
-                var a1 = 4.0*ca;
-                var a2 = a2plus1 - alphan*ma2plus1;
-                var b0 = a2plus1 + alphad*ma2plus1;
-                var b2 = a2plus1 - alphad*ma2plus1;
+                this.a0 = a2plus1 + alphan*ma2plus1;
+                this.a1 = 4.0*ca;
+                this.a2 = a2plus1 - alphan*ma2plus1;
+                this.b0 = a2plus1 + alphad*ma2plus1;
+                this.b2 = a2plus1 - alphad*ma2plus1;
 
-                var recipb0 = 1/b0;
-                a0 *= recipb0;
-                a1 *= recipb0;
-                a2 *= recipb0;
-                var b1 = a1;
-                b2 *= recipb0;
+                var recipb0 = 1 / this.b0;
+                this.a0 *= recipb0;
+                this.a1 *= recipb0;
+                this.a2 *= recipb0;
+                this.b1 = this.a1;
+                this.b2 *= recipb0;
 
-                b1 = -b1;
-                b2 = -b2;
+                this.b1 = -this.b1;
+                this.b2 = -this.b2;
             }
             // void reset()                { this.z1 = (); }
 
-            FrameType process (FrameType x)
+            float32 process (float32 x)
             {
                 // mono == 1 ? (
                 // xl = (spl0+spl1)/2;
                 
                 // yl = a0*xl + a1*x1l + a2*x2l + b1*y1l + b2*y2l;
-                float yl = this.a0*x + this.a1*this.x1l + this.a2*this.x2l + this.b1*this.y1l + this.b2*this.y2l;
+                let yl = float32(this.a0*x + this.a1*this.x1l + this.a2*this.x2l + this.b1*this.y1l + this.b2*this.y2l);
                 this.x2l = this.x1l;
                 this.x1l = x;
                 this.y2l = this.y1l;
@@ -380,15 +362,6 @@ namespace lx::filters (using FrameType = float32,
 
                 //return yl * this.outgain;
                 return yl;
-
-                // let a = FrameType (this.b) * (x - this.z1);
-                // let f = a + this.z1;
-                // this.z1 = a + f;
-
-                // if (this.mode == Mode::lowPass)
-                //     return f;
-
-                // return x - f;
             }
         }
 
@@ -396,15 +369,15 @@ namespace lx::filters (using FrameType = float32,
         {
             // input stream FrameType in;
             // output stream FrameType out;
-            input stream float procIn;
-            output stream float procOut;
+            input stream float32 procIn;
+            output stream float32 procOut;
 
             input event
             {
-                float frequency     [[ name: "Frequency",   min: 3100,  max: 18500, init: 7700, unit: "Hz"]];
+                float frequency     [[ name: "Frequency",   min: 200,  max: 18500, init: 7700, unit: "Hz"]];
                 float cutBoost      [[ name: "CutBoost",    min: -15,   max: 15,    init: 0,    unit: "dB"]];
                 float bandwidthX     [[ name: "Bandwidth",   min: 0.07,  max: 0.40,  init: 0.20, unit: "?"]];
-                float outputLevel     [[ name: "Output",      min: -25,   max: 25,    init: 0,    unit: "dB"]];
+                float outputLevel     [[ name: "Output",      min: -40,   max: 40,    init: -20,    unit: "dB"]];
             }
 
             event frequency (float f)       {  updateFilter = true; filterFrequencyX = f; }
@@ -423,172 +396,43 @@ namespace lx::filters (using FrameType = float32,
 
             int count = 0;
 
+            float in;
+
             void main()
             {
-                float inTest;
-                float outTest;
-                float level;
-
                 loop
                 {
-                    level = std::levels::dBtoGain (outputLeveldB);
-                    inTest = procIn * level;
 
-                    //debug
-                    if (++count >= processor.frequency / 5)
+                    
+
+                    if (updateFilter)
                     {
-                        console <- "\n";
-                        console <- "xx: ";
-                        console <- float (procIn);
-                        count = 0;
+                        filter.setFrequency (processor.frequency, filterFrequencyX, cutBoostdB, bandwidthIn, outputLeveldB);
+                        updateFilter = false;
                     }
 
-                    filter.setFrequency (processor.frequency, filterFrequencyX, cutBoostdB, bandwidthIn, outputLeveldB);
-                    filter.process(procIn);
+                    loop (parameterUpdateRate)
+                    {
+                        in = procIn * std::levels::dBtoGain(outputLeveldB);
 
-                    procOut <- procIn;
+                        // lowOut <- result[0];
+                        // highOut <- result[1];
+                        // bandOut <- result[2];
 
-                    // if (updateFilter)
-                    // {
-                    //     //setFrequencyProc ( processor.frequency, filterFrequency, cutBoostdB, bandwidthIn, outputLeveldB );
+                        if (++count >= processor.frequency / 5)
+                        {
+                            console <- "\n";
+                            console <- "xx: ";
+                            console <- float (in);
+                            count = 0;
+                        }
 
-                    //     filter.setFrequency (processor.frequency, filterFrequency, cutBoostdB, bandwidthIn, outputLeveldB);
-                    //     updateFilter = false;
+                        procOut <- filter.process(in);
 
-                    //     // //debug
-                    //     // if (++count >= processor.frequency / 2000)
-                    //     // {
-                    //     //     console <- "\n";
-                    //     //     console <- "CHANGE: ";
-                    //     //     console <- float (processor.frequency);
-                    //     //     count = 0;
-                    //     // }
-
-                    //     // test();
-
-
-
-                    // }
-                    //     // out <- filter.process (in);
-                    //     // advance();
-                    // loop (parameterUpdateRate)
-                    // {
-
-
-                    //     out <- filter.process (in);
-                    //     advance();
-                    // }
-
-                    //debug
-                    // if (++count >= processor.frequency / 5)
-                    // {
-                    //     console <- "\n";
-                    //     console <- "xx: ";
-                    //     console <- float (in);
-                    //     count = 0;
-                    // }
-                    //out <- in;
-
-                    advance();
+                        advance();
+                    }
                 }
             }
-
-        
-            // void setFrequencyProc (float processorFrequency, float filterFrequency, float boostVar, float bandwidth, int outputdb )
-            // {
-            //     //mono = slider1;
-            //     let cf = filterFrequency/ processorFrequency; // srate; //slider 2
-            //     // float boost = std::levels::dBtoGain(boostVar); //slider 3
-            //     let boost = boostVar;
-            //     let bw = bandwidth; //slider 4  // removed "/srate" here and added BW in proper ranges
-            //     //float outgain = 10^(outputdb/20); //slider 5
-            //     let ca = tan(pi*(cf-0.25)); 
-
-            //     let A = pow(10.0,(boost/20));
-
-            //     let F = 0.0;
-
-            //     if (boost < 6.0 && boost > -6.0) 
-            //     {
-            //         F = sqrt(A);
-            //     }
-            //     else
-            //     {
-            //         if (A > 1)
-            //         {
-            //             F = A/sqrt(2.0f);
-            //         } 
-            //         else 
-            //         {
-            //             F = A*sqrt(2.0f);
-            //         }
-            //     };
-                                        
-            //     let T = tan(2 * pi * bw);
-            //     let as2 = ca * ca;
-            //     let as4 = as2 * as2;
-            //     let d = 2 * as2 * T;
-            //     let sn = (1 + as4) * T;
-            //     let cs = (1 - as4);
-            //     let mag = sqrt(sn * sn + cs * cs);
-            //     d = mag;
-            //     let delta = atan2(sn, cs);
-            //     let asnd = 0.0; // this is always 0
-
-            //     if (asnd > pi/2 || asnd < pi/2)
-            //     {
-            //         asnd = 0;
-            //     }
-            //     else
-            //     {
-            //         asnd = asin(d);
-            //     }
-
-            //     let theta = 0.5 * (pi - asnd - delta);
-            //     let tmp = 0.5 * (asnd - delta);
-
-            //     if (tmp > 0 && tmp < theta)
-            //     {  
-            //         theta = tmp;  
-            //     };
-
-            //     let xfmbw = theta/(2 * pi);
-            //     let C = 1/tan(2*pi*xfmbw);
-            //     let F2 = F*F;
-            //     tmp = A*A - F2;
-
-            //     let alphad;
-            //     let SPN;
-
-            //     if (abs(tmp) <= SPN){
-
-            //         alphad = C;
-            //     } 
-            //     else
-            //     {
-            //         alphad = sqrt(C*C*(F2-1)/tmp);  
-            //     }
-                
-            //     let alphan = A*alphad;
-            //     let a2plus1 = 1 + as2;
-            //     let ma2plus1 = 1 - as2;
-
-            //     float a0 = a2plus1 + alphan*ma2plus1;
-            //     float a1 = 4.0*ca;
-            //     float a2 = a2plus1 - alphan*ma2plus1;
-            //     float b0 = a2plus1 + alphad*ma2plus1;
-            //     float b2 = a2plus1 - alphad*ma2plus1;
-
-            //     float recipb0 = 1/b0;
-            //     a0 *= recipb0;
-            //     a1 *= recipb0;
-            //     a2 *= recipb0;
-            //     float b1 = a1;
-            //     b2 *= recipb0;
-
-            //     b1 = -b1;
-            //     b2 = -b2;
-            // }
         }
     }
 }

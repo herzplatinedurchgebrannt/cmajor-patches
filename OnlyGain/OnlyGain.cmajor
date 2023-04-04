@@ -74,7 +74,7 @@ processor SimpleDiode
             {
                 console <- "\n";
                 console <- "xx: ";
-                console <- float (in);
+                console <- float (out);
                 count = 0;
             }
 
