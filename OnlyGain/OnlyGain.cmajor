@@ -46,6 +46,7 @@ processor SimpleDiode
     // filter variables
     float gain;
     float level;
+    int count = 0;
 
     // Main processing function
     void main()
@@ -67,6 +68,15 @@ processor SimpleDiode
             // {
             //     out = -1;
             // }
+
+            //debug
+            if (++count >= processor.frequency / 5)
+            {
+                console <- "\n";
+                console <- "xx: ";
+                console <- float (in);
+                count = 0;
+            }
 
             out = tanh(in);
 
