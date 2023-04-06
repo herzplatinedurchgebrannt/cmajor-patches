@@ -1,0 +1,12 @@
+{
+    "CmajorVersion":    1,
+    "ID":               "com.your_name.your_patch_ID",
+    "version":          "1.0",
+    "name":             "4BandEQ",
+    "description":      "4BandEQ",
+    "category":         "generator",
+    "manufacturer":     "Your Company Goes Here",
+    "isInstrument":     true,
+
+    "source":           "4BandEQ.cmajor"
+}
