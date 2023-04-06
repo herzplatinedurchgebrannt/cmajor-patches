@@ -100,21 +100,21 @@ graph Filter [[ main ]]
     input stream float In;
     output stream float Out;
 
-    input eq.lowGain;
-    input eq.lowFreq;
-    input eq.lowMidGain;
-    input eq.lowMidFreq
-    input eq.hiMidgain
-    input eq.hiMidFreq;
-    input eq.hiGain;
-    input eq.outGain;
+    input eq.eLowGain;
+    input eq.eLowFreq;
+    input eq.eLowMidGain;
+    input eq.eLowMidFreq;
+    input eq.eHiMidGain;
+    input eq.eHiMidFreq;
+    input eq.eHiGain;
+    input eq.eOutGain;
 
     node eq = lx::equalizer(float)::fourBandEQ::Processor();
 
     connection
     {
-        In -> filter.procIn;
-        filter.procOut -> Out;
+        In -> eq.procIn;
+        eq.procOut -> Out;
     }
 }
 
@@ -122,53 +122,60 @@ namespace lx::equalizer (using FrameType = float32,
                        using CoefficientType = float32,
                        int parameterUpdateRate = 32)
 {
-    let defaultFrequency = 7700; 
-    let defaultCutBoost = 0; 
-    let defaultBandwidth = 0.20f; 
-    let defaultOutput = 0;
+    let defLowGain = 0;
+    let defLowFreq = 200; 
+    let defLowMidGain = 0;
+    let defLowMidFreq = 2000;
+    let defHiMidGain = 0;
+    let defHiMidFreq = 5000;
+    let defHiGain = 0;
+    let defOutGain = 0;
 
     namespace fourBandEQ
     {
         Implementation create 
         (
-            float processorFrequency, float lowGain, float lowFreq, 
-            float lowMidGain, float lowMidFreq, float hiMidGain, 
-            float hiMidFreq, float hiGain, float outGain
+            float64 processorFrequency, float64 lowGain, float64 lowFreq, 
+            float64 lowMidGain, float64 lowMidFreq, float64 hiMidGain, 
+            float64 hiMidFreq, float64 hiGain, float64 outGain
         )
 
         {
-            Implementation filter;
-            filter.setFrequency (processorFrequency, lowGain, lowFreq, lowMidGain, lowMidFreq, hiMidGain, hiMidFreq, hiGain, outGain);
-            return filter;
+            Implementation eq;
+            eq.setFrequency(processorFrequency, lowGain, lowFreq, lowMidGain, lowMidFreq, hiMidGain, hiMidFreq, hiGain, outGain);
+            return eq;
         }
 
         struct Implementation
         {
-            float ext_tail_size;
-            float cDenorm;
-            float cAmpDB;
-
-            float lVol;
-            float lmVol;
-            float hmVol;
-            float hVol;
-            float outVol;
-            float freqHI;
-            float xHI;
-            float a0HI;
-            float b1HI;
-            float freqMID;
-            float xMID;
-            float a0MID;
-            float b1MID;
-            float freqLOW;
-            float xLOW;
-            float a0LOW;
-            float b1LOW;
-
-            float tmplLOW,
-            float tmplMID;
-            float tmplHI;
+            float64 ext_tail_size;
+            float64 cDenorm;
+            float64 cAmpDB;
+            
+            float64 lVol;
+            float64 lmVol;
+            float64 hmVol;
+            float64 hVol;
+            float64 outVol;
+            float64 freqHI;
+            float64 xHI;
+            float64 a0HI;
+            float64 b1HI;
+            float64 freqMID;
+            float64 xMID;
+            float64 a0MID;
+            float64 b1MID;
+            float64 freqLOW;
+            float64 xLOW;
+            float64 a0LOW;
+            float64 b1LOW;
+            float64 low0;
+            float64 spl0;
+            float64 midS0;
+            
+            float64 tmplLOW;
+            float64 tmplMID;
+            float64 tmplHI;
 
             void reset()
             {
@@ -178,13 +185,16 @@ namespace lx::equalizer (using FrameType = float32,
                 this.tmplHI = 0;
                 this.tmplMID = 0;
                 this.tmplLOW = 0;
+                this.low0 = 0;
+                this.spl0 = 0;
+                this.midS0 = 0;
             }
 
             void setFrequency 
             (
-                float processorFrequency, float lowGain, float lowFreq, 
-                float lowMidGain, float lowMidFreq, float hiMidGain, 
-                float hiMidFreq, float hiGain, float outGain
+                float64 processorFrequency, float64 lowGain, float64 lowFreq, 
+                float64 lowMidGain, float64 lowMidFreq, float64 hiMidGain, 
+                float64 hiMidFreq, float64 hiGain, float64 outGain
             )
             
             {
@@ -205,7 +215,7 @@ namespace lx::equalizer (using FrameType = float32,
                 this.b1MID = - this.xMID;
 
                 this.freqLOW = min(min(lowFreq, processorFrequency),lowMidFreq);
-                this.xLOW = exp(-2.0 * pi * freqLOW / processorFrequency);
+                this.xLOW = exp(-2.0 * pi * this.freqLOW / processorFrequency);
                 this.a0LOW = 1.0 - this.xLOW;
                 this.b1LOW = - this.xLOW;
             }
@@ -215,22 +225,22 @@ namespace lx::equalizer (using FrameType = float32,
             {
                 let s0 = x;
 
-                let low0 = a0MID * s0 - b1MID * tmplMID + cDenorm;
-                tmplMID = low0;
+                this.low0 = this.a0MID * s0 - this.b1MID * this.tmplMID + this.cDenorm;
+                this.tmplMID = this.low0;
 
-                let spl0 = a0LOW * low0 - b1LOW * tmplLOW + cDenorm;
-                tmplLOW = spl0;
+                this.spl0 = this.a0LOW * this.low0 - this.b1LOW * this.tmplLOW + this.cDenorm;
+                this.tmplLOW = this.spl0;
 
-                let lowS0 = low0 - spl0;
+                let lowS0 = this.low0 - this.spl0;
 
-                let hi0 = s0 - low0;
+                let hi0 = s0 - this.low0;
 
-                let midS0 = this.a0HI * hi0 - this.b1HI * this.tmplHI + this.cDenorm;
-                tmplHI = midS0;
+                this.midS0 = this.a0HI * hi0 - this.b1HI * this.tmplHI + this.cDenorm;
+                this.tmplHI = this.midS0;
 
-                let highS0 = hi0 - midS0;
+                let highS0 = hi0 - this.midS0;
 
-                let y0 = spl0 * this.lVol + lowS0 * this.lmVol + midS0 * this.hmVol + highS0 * this.hVol;
+                let y0 = float32(this.spl0 * this.lVol + lowS0 * this.lmVol + this.midS0 * this.hmVol + highS0 * this.hVol);
 
                 return y0;
             }
@@ -255,18 +265,18 @@ namespace lx::equalizer (using FrameType = float32,
             }
 
             // event change
-            event eLowGain      (float f)   {  updateFilter = true; LowGain     = f; }
-            event eLowFreq      (float f)   {  updateFilter = true; LowFreq     = f; }
-            event eLowMidGain   (float f)   {  updateFilter = true; LowMidGain  = f; }
-            event eLowMidFreq   (float f)   {  updateFilter = true; LowMidFreq  = f; }
-            event eHiMidGain    (float f)   {  updateFilter = true; HiMidGain   = f; }
-            event eHiMidFreq    (float f)   {  updateFilter = true; HiMidFreq   = f; }
-            event eHiGain       (float f)   {  updateFilter = true; HiGain      = f; }
-            event eOutGain      (float f)   {  updateFilter = true; OutGain     = f; }
+            event eLowGain      (float f)   {  updateEq = true; lowGain     = f; }
+            event eLowFreq      (float f)   {  updateEq = true; lowFreq     = f; }
+            event eLowMidGain   (float f)   {  updateEq = true; lowMidGain  = f; }
+            event eLowMidFreq   (float f)   {  updateEq = true; lowMidFreq  = f; }
+            event eHiMidGain    (float f)   {  updateEq = true; hiMidGain   = f; }
+            event eHiMidFreq    (float f)   {  updateEq = true; hiMidFreq   = f; }
+            event eHiGain       (float f)   {  updateEq = true; hiGain      = f; }
+            event eOutGain      (float f)   {  updateEq = true; outGain     = f; }
 
-            var filter = create (processor.frequency, initialFrequency, initialCutBoost, initialBandwidth, initialOutput);
+            var eq = create(processor.frequency, initLowGain, initLowFreq, initLowMidGain, initLowMidFreq, initHiMidGain, initHiMidFreq, initHiGain, initOutGain);
 
-            bool updateFilter = false;
+            bool updateEq = false;
 
             float lowGain = initLowGain;
             float lowFreq = initLowFreq;
@@ -286,15 +296,15 @@ namespace lx::equalizer (using FrameType = float32,
             {
                 loop
                 {
-                    if (updateFilter)
+                    if (updateEq)
                     {
-                        filter.setFrequency (processor.frequency, lowGain, lowFreq, lowMidGain, lowMidFreq, hiMidGain, hiMidFreq, hiGain, outGain);
-                        updateFilter = false;
+                        eq.setFrequency (processor.frequency, lowGain, lowFreq, lowMidGain, lowMidFreq, hiMidGain, hiMidFreq, hiGain, outGain);
+                        updateEq = false;
                     }
 
                     loop (parameterUpdateRate)
                     {
-                        in = procIn * std::levels::dBtoGain(outputLeveldB);
+                        in = procIn * std::levels::dBtoGain(outGain);
 
                         if (++count >= processor.frequency / 5)
                         {
@@ -304,7 +314,7 @@ namespace lx::equalizer (using FrameType = float32,
                             count = 0;
                         }
 
-                        procOut <- filter.process(in);
+                        procOut <- eq.process(in);
 
                         advance();
                     }
